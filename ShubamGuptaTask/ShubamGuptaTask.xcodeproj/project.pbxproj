@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 50;
+	objectVersion = 51;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -166,7 +166,6 @@
 				EC49901CF47D8F1B47481A65 /* Pods-ShubamGuptaTask.debug.xcconfig */,
 				4193788945F7F7986C2667D6 /* Pods-ShubamGuptaTask.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -443,6 +442,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 53UR92388F;
 				INFOPLIST_FILE = ShubamGuptaTask/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -461,6 +461,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 53UR92388F;
 				INFOPLIST_FILE = ShubamGuptaTask/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

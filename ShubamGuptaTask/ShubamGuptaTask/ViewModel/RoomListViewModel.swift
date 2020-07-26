@@ -9,6 +9,12 @@
 import Foundation
 import UIKit
 import Reachability
+import CoreData
+
+enum CheckInternet {
+    case online
+    case offline
+}
 
 //MARK: Protocol and Delegates
 protocol RoomListViewModelDelegates: NSObjectProtocol {
@@ -20,6 +26,14 @@ class RoomListViewModel: NSObject {
     var parentVC = UITableViewController()
     let refreshControl = UIRefreshControl()
     let reachability = try! Reachability()
+    var type: CheckInternet = .online
+    var storedCoreData: [String] = [] {
+        didSet{
+            delegates?.tableViewReload()
+        }
+    }
+    let appDelegate = UIApplication.shared.delegate as! AppDelegate
+    let context: NSManagedObjectContext
     weak var delegates: RoomListViewModelDelegates?
     
     var roomList: [RoomListData] = [] {
@@ -32,6 +46,7 @@ class RoomListViewModel: NSObject {
     init(parent: UITableViewController,withDelegates delegate: RoomListViewModelDelegates?) {
         parentVC = parent
         delegates = delegate
+        context = appDelegate.persistentContainer.viewContext
     }
 
     //MARK: RefreshTableView
@@ -44,14 +59,15 @@ class RoomListViewModel: NSObject {
     func checkReachability() {
         reachability.whenReachable = { _ in
             self.roomListApiCallBack()
-            print("YES INTERNET IS AVAILABLE")
+            self.type = .online
         }
         
         reachability.whenUnreachable = { _ in
-            print("NO Internet Connection")
+            self.parentVC.showToast(message: "NO INTERNET", font: .systemFont(ofSize: 12.0))
+            self.type = .offline
+            self.fetchDataFromCoreData()
         }
         
-        NotificationCenter.default.addObserver(self, selector: #selector(internetChanged), name: Notification.Name.reachabilityChanged, object: reachability)
         do{
           try reachability.startNotifier()
         }catch{
@@ -59,35 +75,95 @@ class RoomListViewModel: NSObject {
         }
     }
     
-    @objc func internetChanged(note: Notification) {
-        let reachab = note.object as! Reachability
-        if reachab.connection == .unavailable {
-            print("NO Inernet Connection")
+    @objc private func refreshWeatherData(_ sender: Any) {
+        //API Call Back
+        if type == .offline {
+            self.refreshControl.endRefreshing()
+            self.parentVC.showToast(message: "NO INTERNET", font: .systemFont(ofSize: 12.0))
         } else {
-            print("Internet Availble")
+            self.refreshControl.endRefreshing()
+            self.roomListApiCallBack()
+        }
+        
+    }
+    
+    //MARK: COREDATA
+    func saveDataInCoreData() {
+        
+        //SAVE DATA
+        let entity = NSEntityDescription.entity(forEntityName: "RMListData", in: context)
+        let newUser = NSManagedObject(entity: entity!, insertInto: context)
+        newUser.setValue(storedCoreData, forKey: "rmData")
+        do {
+            print("Saved Succssfully")
+            try context.save()
+        } catch {
+            print("Failed saving")
         }
     }
     
-    @objc private func refreshWeatherData(_ sender: Any) {
-        //API Call Back
-        roomListApiCallBack()
+    func fetchDataFromCoreData() {
+        
+        //FetchData
+        let request = NSFetchRequest<NSFetchRequestResult>(entityName: "RMListData")
+        request.returnsObjectsAsFaults = false
+    
+        do {
+            let result = try context.fetch(request)
+            for data in result as! [NSManagedObject] {
+               print(data.value(forKey: "rmData") as! [String])
+                
+                let data = data.value(forKey: "rmData") as! [String]
+                storedCoreData.append(contentsOf: data)
+                
+            }
+            self.refreshControl.endRefreshing()
+            print("Sam \(storedCoreData.count)")
+        } catch {
+            parentVC.showToast(message: "Failed to Save", font: .systemFont(ofSize: 12.0))
+        }
+    }
+    
+    func deleteAllData(_ entity:String) {
+        let DelAllReqVar = NSBatchDeleteRequest(fetchRequest: NSFetchRequest<NSFetchRequestResult>(entityName: entity))
+        do {
+            try context.execute(DelAllReqVar)
+            storedCoreData.removeAll()
+        }
+        catch {
+            print(error)
+        }
     }
     
     //MARK: CellForRow
     func cellForRowAt(_ cell: UITableViewCell, indexPath: IndexPath) {
-        cell.textLabel?.text = "\(roomList[indexPath.row].org.name)-\(roomList[indexPath.row].property.name) - \(roomList[indexPath.row].room.name)"
+        if type == .online {
+            cell.textLabel?.text = "\(roomList[indexPath.row].org.name)-\(roomList[indexPath.row].property.name) - \(roomList[indexPath.row].room.name)"
+        } else {
+            cell.textLabel?.text = "\(storedCoreData[indexPath.row])"
+        }
+        
     }
     
     //MARK: NumberOfRows
     func numberOfRowsInSection() -> Int {
-        return roomList.count
+        if type == .online {
+            return roomList.count
+        } else {
+            return storedCoreData.count
+        }
+        
     }
     
     //MARK: didSelect
     func didSelectRowAt(indexPath: IndexPath) {
-        let roomIdValue = roomList[indexPath.row].room.id
-        print(roomIdValue)
-        delegates?.moveOneVcToOther(roomId: roomIdValue)
+        if type == .online {
+            let roomIdValue = roomList[indexPath.row].room.id
+            print(roomIdValue)
+            delegates?.moveOneVcToOther(roomId: roomIdValue)
+        } else {
+            self.parentVC.showToast(message: "No Internet", font: .systemFont(ofSize: 12.0))
+        }
     }
     
     //MARK: RoomListAPI CallBack
@@ -97,12 +173,19 @@ class RoomListViewModel: NSObject {
         Middleware.init { (status, roomListData, message) in
             switch status {
             case .success:
+                self.deleteAllData("RMListData")
                 guard let info = roomListData as? RoomList else {
                     self.parentVC.showToast(message: "Something went wrong", font: .systemFont(ofSize: 12.0))
                     return
                 }
                 self.refreshControl.endRefreshing()
-                print(info.data[0])
+                print(info.data.count)
+                for index in 0...info.data.count - 1 {
+                    let valueIndex = "\(info.data[index].org.name)-\(info.data[index].property.name)-\(info.data[index].room.name)"
+                    self.storedCoreData.append(valueIndex)
+                }
+                print(self.storedCoreData)
+                self.saveDataInCoreData()
                 self.roomList = info.data
                 
             case .badRequest:
